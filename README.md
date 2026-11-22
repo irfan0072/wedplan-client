@@ -90,6 +90,6 @@ Quick-sign-in buttons are also provided on the `/login` page for fast evaluator 
 
 ## 🔗 Repository & Live Links
 
-- **Client Repository**: [https://github.com/wedplan/wedplan-client](https://github.com/wedplan/wedplan-client)
-- **Server Repository**: [https://github.com/wedplan/wedplan-server](https://github.com/wedplan/wedplan-server)
+- **Client Repository**: [https://github.com/irfan0072/wedplan-client](https://github.com/irfan0072/wedplan-client)
+- **Server Repository**: [https://github.com/irfan0072/wedplan-server](https://github.com/irfan0072/wedplan-server)
 - **Live Website**: [https://wedplan-wedding.vercel.app](https://wedplan-wedding.vercel.app)
