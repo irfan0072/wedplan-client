@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { store, verifyAuthHeader } from '@/lib/server-store';
+import { store, verifyAuthHeader, handleApiError } from '@/lib/server-store';
 
 export async function POST(req: NextRequest) {
   try {
@@ -78,6 +78,7 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err: any) {
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    const { status, body } = handleApiError(err);
+    return NextResponse.json(body, { status });
   }
 }

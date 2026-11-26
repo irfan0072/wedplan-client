@@ -325,6 +325,11 @@ export function generateToken(user: any): string {
       email: user.email,
       role: user.role,
       name: user.name,
+      image: user.image,
+      businessName: user.businessName,
+      phone: user.phone,
+      bio: user.bio,
+      subscriptionPlan: user.subscriptionPlan || 'free',
     },
     JWT_SECRET,
     { expiresIn: '7d' }
@@ -362,7 +367,30 @@ export function verifyAuthHeader(authHeader: string | null): any {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
-    const user = store.users.find((u) => u._id === decoded.id || u.id === decoded.id);
+    let user = store.users.find(
+      (u) =>
+        u._id === decoded.id ||
+        u.id === decoded.id ||
+        (decoded.email && u.email?.toLowerCase() === decoded.email.toLowerCase())
+    );
+    if (!user && decoded.id && decoded.email && decoded.role) {
+      // Rehydrate user from verified JWT across serverless instances/cold starts
+      user = {
+        _id: decoded.id,
+        id: decoded.id,
+        name: decoded.name || decoded.email.split('@')[0],
+        email: decoded.email.toLowerCase(),
+        role: decoded.role,
+        image: decoded.image,
+        businessName: decoded.businessName || '',
+        phone: decoded.phone || '',
+        bio: decoded.bio || '',
+        subscriptionPlan: decoded.subscriptionPlan || 'free',
+        isBlocked: false,
+        createdAt: new Date().toISOString(),
+      };
+      store.users.push(user);
+    }
     if (!user) {
       throw new AuthError('User no longer exists.', 401);
     }
