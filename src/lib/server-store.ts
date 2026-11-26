@@ -331,18 +331,47 @@ export function generateToken(user: any): string {
   );
 }
 
+export class AuthError extends Error {
+  statusCode: number;
+  constructor(message: string, statusCode = 401) {
+    super(message);
+    this.name = 'AuthError';
+    this.statusCode = statusCode;
+  }
+}
+
+export function handleApiError(err: any): { status: number; body: { success: boolean; message: string } } {
+  if (err instanceof AuthError) {
+    return { status: err.statusCode, body: { success: false, message: err.message } };
+  }
+  const isAuthMsg =
+    err.message?.includes('Authentication') ||
+    err.message?.includes('token') ||
+    err.message?.includes('jwt');
+  const isForbidden =
+    err.message?.toLowerCase().includes('forbidden') ||
+    err.message?.toLowerCase().includes('suspended');
+  const status = isForbidden ? 403 : isAuthMsg ? 401 : 500;
+  return { status, body: { success: false, message: err.message || 'Server error' } };
+}
+
 export function verifyAuthHeader(authHeader: string | null): any {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    throw new Error('Authentication required. No token provided.');
+    throw new AuthError('Authentication required. No token provided.', 401);
   }
   const token = authHeader.split(' ')[1];
-  const decoded = jwt.verify(token, JWT_SECRET) as any;
-  const user = store.users.find((u) => (u._id === decoded.id || u.id === decoded.id));
-  if (!user) {
-    throw new Error('User no longer exists.');
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const user = store.users.find((u) => u._id === decoded.id || u.id === decoded.id);
+    if (!user) {
+      throw new AuthError('User no longer exists.', 401);
+    }
+    if (user.isBlocked) {
+      throw new AuthError('Account suspended by an administrator.', 403);
+    }
+    return user;
+  } catch (err: any) {
+    if (err instanceof AuthError) throw err;
+    throw new AuthError('Invalid or expired authentication token.', 401);
   }
-  if (user.isBlocked) {
-    throw new Error('Account suspended by an administrator.');
-  }
-  return user;
 }

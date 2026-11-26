@@ -30,9 +30,9 @@ export async function GET(req: NextRequest) {
       filtered = filtered.filter((s) => s.location.toLowerCase().includes(location));
     }
 
-    if (sort === 'price_asc') {
+    if (sort === 'price_asc' || sort === 'price-asc') {
       filtered.sort((a, b) => a.price - b.price);
-    } else if (sort === 'price_desc') {
+    } else if (sort === 'price_desc' || sort === 'price-desc') {
       filtered.sort((a, b) => b.price - a.price);
     } else {
       filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
