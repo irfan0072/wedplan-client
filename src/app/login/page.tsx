@@ -4,7 +4,10 @@ import React, { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { Heart, Lock, Mail, Loader2, Sparkles, UserCheck } from 'lucide-react';
+import { Heart, Lock, Mail, Loader2, Sparkles, Settings2 } from 'lucide-react';
+import { GoogleOAuthModal } from '@/components/auth/GoogleOAuthModal';
+import { getActiveGoogleClientId, requestGoogleToken, GoogleAuthResult } from '@/lib/google-auth';
+import { toast } from 'sonner';
 
 function LoginFormContent() {
   const router = useRouter();
@@ -15,6 +18,7 @@ function LoginFormContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showGoogleModal, setShowGoogleModal] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,11 +35,38 @@ function LoginFormContent() {
     setPassword(demoPass);
   };
 
+  const handleGoogleAuthSuccess = async (data: GoogleAuthResult) => {
+    const success = await googleLogin(data);
+    if (success && redirectUrl) {
+      router.push(redirectUrl);
+    }
+  };
+
   const handleGoogleAuth = async () => {
-    setLoading(true);
-    await googleLogin('google.user@wedplan.com', 'Google Demo User', undefined, 'customer');
-    setLoading(false);
-    if (redirectUrl) router.push(redirectUrl);
+    const activeClientId = getActiveGoogleClientId();
+    if (!activeClientId) {
+      // Prompt user/evaluator with Google OAuth configuration modal
+      setShowGoogleModal(true);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const { accessToken, profile } = await requestGoogleToken(activeClientId);
+      await handleGoogleAuthSuccess({
+        email: profile.email,
+        name: profile.name,
+        image: profile.picture,
+        googleId: profile.sub,
+        accessToken,
+        role: 'customer',
+      });
+    } catch (err: any) {
+      toast.error(err.message || 'Google OAuth failed. Check your Client ID.');
+      setShowGoogleModal(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -144,32 +175,49 @@ function LoginFormContent() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleGoogleAuth}
-          disabled={loading}
-          className="w-full py-2.5 px-4 rounded-xl border border-gray-200 hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center justify-center space-x-2 transition-colors shadow-2xs"
-        >
-          <svg className="w-4 h-4" viewBox="0 0 24 24">
-            <path
-              fill="#4285F4"
-              d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
-            />
-            <path
-              fill="#EA4335"
-              d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-            />
-          </svg>
-          <span>Sign In with Google</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={handleGoogleAuth}
+            disabled={loading}
+            className="flex-1 py-2.5 px-4 rounded-xl border border-gray-200 hover:bg-gray-50 text-xs font-semibold text-gray-700 flex items-center justify-center space-x-2 transition-colors shadow-2xs"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+              />
+            </svg>
+            <span>Sign In with Google</span>
+          </button>
+          <button
+            type="button"
+            title="Google OAuth Settings"
+            onClick={() => setShowGoogleModal(true)}
+            className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors shadow-2xs"
+          >
+            <Settings2 className="w-4 h-4" />
+          </button>
+        </div>
+
+        <GoogleOAuthModal
+          isOpen={showGoogleModal}
+          onClose={() => setShowGoogleModal(false)}
+          role="customer"
+          onSuccess={handleGoogleAuthSuccess}
+        />
 
         <p className="text-center text-xs text-gray-500">
           Don't have an account yet?{' '}

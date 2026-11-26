@@ -33,7 +33,7 @@ WedPlan is a premier role-based wedding planning platform built with Next.js (Ap
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS
 - **Components & Icons**: Lucide React, Framer Motion, Sonner Toast Notifications
-- **Authentication**: JWT Token Storage & Reactive Auth Context
+- **Authentication**: JWT Token Storage & Reactive Auth Context with Official Google Identity Services (GIS) OAuth 2.0
 - **Image Hosting**: ImgBB API Integration with base64 fallback
 - **Payments**: Stripe Checkout
 
@@ -47,7 +47,18 @@ Create a `.env.local` file in the `client` root directory matching `.env.local.e
 NEXT_PUBLIC_API_URL=http://localhost:5000/api
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key
 NEXT_PUBLIC_IMGBB_API_KEY=your_imgbb_api_key
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
 ```
+
+### 🌐 Google OAuth 2.0 Setup (GIS)
+WedPlan integrates official Google Identity Services (GIS). To test with your own Google Cloud account:
+1. Open the [Google Cloud Console Credentials](https://console.cloud.google.com/apis/credentials) page.
+2. Create an **OAuth 2.0 Client ID** with Application type: **Web application**.
+3. Add **Authorized JavaScript origins**:
+   - `https://wedplan-client-umber.vercel.app`
+   - `http://localhost:3000`
+4. Copy the Client ID into `.env.local` as `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (or input it directly in the UI via the Google OAuth Settings dialog).
+5. For evaluator convenience, an instant verified demo Google account option is also available in the modal.
 
 ---
 

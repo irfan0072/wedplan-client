@@ -11,7 +11,22 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<boolean>;
-  googleLogin: (email: string, name: string, image?: string, role?: string) => Promise<boolean>;
+  googleLogin: (
+    emailOrData:
+      | string
+      | {
+          email: string;
+          name: string;
+          image?: string;
+          role?: string;
+          accessToken?: string;
+          idToken?: string;
+          googleId?: string;
+        },
+    name?: string,
+    image?: string,
+    role?: string
+  ) => Promise<boolean>;
   register: (data: {
     name: string;
     email: string;
@@ -102,10 +117,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const googleLogin = async (email: string, name: string, image?: string, role: string = 'customer'): Promise<boolean> => {
+  const googleLogin = async (
+    emailOrData:
+      | string
+      | {
+          email: string;
+          name: string;
+          image?: string;
+          role?: string;
+          accessToken?: string;
+          idToken?: string;
+          googleId?: string;
+        },
+    nameArg?: string,
+    imageArg?: string,
+    roleArg: string = 'customer'
+  ): Promise<boolean> => {
     try {
       setLoading(true);
-      const res = await api.post('/auth/google', { email, name, image, role });
+      const payload =
+        typeof emailOrData === 'string'
+          ? { email: emailOrData, name: nameArg, image: imageArg, role: roleArg }
+          : emailOrData;
+
+      const res = await api.post('/auth/google', payload);
       if (res.success && res.token && res.user) {
         localStorage.setItem('wedplan_token', res.token);
         setToken(res.token);
