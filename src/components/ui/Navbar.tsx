@@ -30,7 +30,7 @@ export const Navbar: React.FC = () => {
   };
 
   const getProfileLink = () => {
-    if (isAdmin) return '/dashboard/admin';
+    if (isAdmin) return '/dashboard/admin/profile';
     if (isVendor) return '/dashboard/vendor/profile';
     return '/dashboard/customer/profile';
   };

@@ -107,6 +107,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { label: 'Manage Users', href: '/dashboard/admin/users', icon: Users },
       { label: 'Manage Services', href: '/dashboard/admin/services', icon: ShieldCheck },
       { label: 'Transactions', href: '/dashboard/admin/transactions', icon: Receipt },
+      { label: 'Profile Settings', href: '/dashboard/admin/profile', icon: Settings },
     ];
   }
 
