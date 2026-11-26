@@ -57,8 +57,7 @@ WedPlan integrates official Google Identity Services (GIS). To test with your ow
 3. Add **Authorized JavaScript origins**:
    - `https://wedplan-client-umber.vercel.app`
    - `http://localhost:3000`
-4. Copy the Client ID into `.env.local` as `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (or input it directly in the UI via the Google OAuth Settings dialog).
-5. For evaluator convenience, an instant verified demo Google account option is also available in the modal.
+4. Copy the Client ID into `.env.local` (or Vercel Environment Variables) as `NEXT_PUBLIC_GOOGLE_CLIENT_ID`.
 
 ---
 

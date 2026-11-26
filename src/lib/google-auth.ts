@@ -23,34 +23,11 @@ export interface GoogleAuthResult {
   role?: string;
 }
 
-// Storage key for custom Google Client ID configuration
-export const GOOGLE_CLIENT_ID_STORAGE_KEY = 'wedplan_google_client_id';
-
 /**
- * Retrieve the active Google Client ID from environment or local storage
+ * Retrieve the Google OAuth Client ID from environment variables
  */
-export const getActiveGoogleClientId = (): string => {
-  if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
-  }
-  return (
-    process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
-    localStorage.getItem(GOOGLE_CLIENT_ID_STORAGE_KEY) ||
-    ''
-  );
-};
-
-/**
- * Save custom Google Client ID
- */
-export const setActiveGoogleClientId = (clientId: string): void => {
-  if (typeof window !== 'undefined') {
-    if (clientId.trim()) {
-      localStorage.setItem(GOOGLE_CLIENT_ID_STORAGE_KEY, clientId.trim());
-    } else {
-      localStorage.removeItem(GOOGLE_CLIENT_ID_STORAGE_KEY);
-    }
-  }
+export const getGoogleClientId = (): string => {
+  return process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 };
 
 /**
