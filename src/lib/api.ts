@@ -1,3 +1,9 @@
+import {
+  recordSyncAfterResponse,
+  mergeSyncOnResponse,
+  fallbackSyncOnNotFound,
+} from './local-sync';
+
 const getApiBaseUrl = (): string => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
   if (envUrl && !envUrl.includes('localhost:5000')) {
@@ -48,9 +54,21 @@ class ApiClient {
       };
     }
 
+    const method = (options.method || 'GET').toUpperCase();
+    const isBuiltInApi = baseUrl === '/api';
+
     if (!response.ok) {
+      if (response.status === 404 && isBuiltInApi) {
+        const localFallback = fallbackSyncOnNotFound(method, endpoint, options.body);
+        if (localFallback) return localFallback;
+      }
       const errorMessage = data?.message || `Request failed with status ${response.status}`;
       throw new Error(errorMessage);
+    }
+
+    if (isBuiltInApi) {
+      recordSyncAfterResponse(method, endpoint, data);
+      return mergeSyncOnResponse(method, endpoint, data);
     }
 
     return data;
