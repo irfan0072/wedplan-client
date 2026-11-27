@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
+      managed_payments: { enabled: false },
       line_items: [
         {
           price_data: {
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
               name: 'WedPlan Premium Vendor Subscription',
               description:
                 'Publish unlimited active wedding services, verified premium badge, and priority placement.',
+              tax_code: 'txcd_10103000',
               images: [
                 'https://images.unsplash.com/photo-1519741497674-611481863552?w=500&auto=format&fit=crop&q=80',
               ],
