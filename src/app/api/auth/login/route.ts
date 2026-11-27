@@ -28,6 +28,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!user.password) {
+      return NextResponse.json(
+        { success: false, message: 'Account registered using Google. Please sign in with Google.' },
+        { status: 400 }
+      );
+    }
+
     const isMatch = bcrypt.compareSync(password, user.password);
     if (!isMatch) {
       return NextResponse.json(
