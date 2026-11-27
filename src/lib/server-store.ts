@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User, Service, Booking, Transaction } from '@/types';
+import { isMongoConfigured, connectMongo, UserModel, serializeDoc } from '@/lib/mongodb';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'wedplan_super_secret_jwt_key_2026_client_api_token';
 
@@ -398,6 +399,36 @@ export function verifyAuthHeader(authHeader: string | null): any {
       throw new AuthError('Account suspended by an administrator.', 403);
     }
     return user;
+  } catch (err: any) {
+    if (err instanceof AuthError) throw err;
+    throw new AuthError('Invalid or expired authentication token.', 401);
+  }
+}
+
+export async function verifyAuthRequest(authHeader: string | null): Promise<any> {
+  if (!isMongoConfigured()) {
+    return verifyAuthHeader(authHeader);
+  }
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    throw new AuthError('Authentication required. No token provided.', 401);
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    await connectMongo();
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    let user = await UserModel.findById(decoded.id).select('-password');
+    if (!user && decoded.email) {
+      user = await UserModel.findOne({ email: decoded.email.toLowerCase() }).select('-password');
+    }
+    if (!user) {
+      throw new AuthError('User no longer exists.', 401);
+    }
+    if (user.isBlocked) {
+      throw new AuthError('Account suspended by an administrator.', 403);
+    }
+    return serializeDoc(user);
   } catch (err: any) {
     if (err instanceof AuthError) throw err;
     throw new AuthError('Invalid or expired authentication token.', 401);

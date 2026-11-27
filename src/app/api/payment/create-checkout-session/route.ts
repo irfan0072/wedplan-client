@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAuthHeader, handleApiError } from '@/lib/server-store';
+import { verifyAuthRequest, handleApiError } from '@/lib/server-store';
 import { getStripeClient } from '@/lib/stripe';
 
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
-    const user = verifyAuthHeader(authHeader);
+    const user = await verifyAuthRequest(authHeader);
 
     if (user.role !== 'vendor') {
       return NextResponse.json(

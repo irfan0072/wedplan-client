@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { store, generateToken } from '@/lib/server-store';
+import { isMongoConfigured, connectMongo, UserModel, serializeDoc, mongoJson } from '@/lib/mongodb';
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,6 +28,37 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(password, salt);
+
+    if (isMongoConfigured()) {
+      await connectMongo();
+      const exists = await UserModel.findOne({ email: email.toLowerCase() });
+      if (exists) {
+        return mongoJson({ success: false, message: 'An account with this email already exists.' }, 400);
+      }
+
+      const assignedRole = role === 'vendor' ? 'vendor' : 'customer';
+      const created = await UserModel.create({
+        name,
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        role: assignedRole,
+        image: image || '',
+        businessName: assignedRole === 'vendor' ? businessName || `${name}'s Wedding Studio` : '',
+        phone: phone || '',
+        subscriptionPlan: 'free',
+        isBlocked: false,
+      });
+
+      const safeUser = serializeDoc(created);
+      const token = generateToken(safeUser);
+      return mongoJson(
+        { success: true, message: 'Account registered successfully!', token, user: safeUser },
+        201
+      );
+    }
+
     const exists = store.users.find((u) => u.email.toLowerCase() === email.toLowerCase());
     if (exists) {
       return NextResponse.json(
@@ -34,9 +66,6 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-
-    const salt = bcrypt.genSaltSync(10);
-    const hashedPassword = bcrypt.hashSync(password, salt);
 
     const newUser = {
       _id: `usr_${Date.now()}`,

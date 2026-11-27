@@ -1,13 +1,61 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { store, verifyAuthHeader, handleApiError } from '@/lib/server-store';
+import { store, verifyAuthRequest, handleApiError } from '@/lib/server-store';
+import {
+  isMongoConfigured,
+  connectMongo,
+  UserModel,
+  ServiceModel,
+  TransactionModel,
+  serializeDoc,
+  mongoJson,
+} from '@/lib/mongodb';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
-    const user = verifyAuthHeader(authHeader);
+    const user = await verifyAuthRequest(authHeader);
 
     if (user.role !== 'admin') {
       return NextResponse.json({ success: false, message: 'Forbidden.' }, { status: 403 });
+    }
+
+    if (isMongoConfigured()) {
+      await connectMongo();
+      const [
+        totalUsers,
+        totalVendors,
+        totalCustomers,
+        totalServices,
+        pendingServices,
+        totalTransactions,
+        recentTxDocs,
+      ] = await Promise.all([
+        UserModel.countDocuments(),
+        UserModel.countDocuments({ role: 'vendor' }),
+        UserModel.countDocuments({ role: 'customer' }),
+        ServiceModel.countDocuments(),
+        ServiceModel.countDocuments({ status: 'pending' }),
+        TransactionModel.countDocuments(),
+        TransactionModel.find()
+          .populate('vendorId', 'name email businessName image')
+          .sort({ createdAt: -1 })
+          .limit(5),
+      ]);
+
+      return mongoJson({
+        success: true,
+        stats: {
+          totalUsers,
+          totalVendors,
+          totalCustomers,
+          totalServices,
+          pendingServices,
+          totalTransactions,
+        },
+        recentTransactions: recentTxDocs.map(serializeDoc),
+      });
     }
 
     const totalUsers = store.users.length;

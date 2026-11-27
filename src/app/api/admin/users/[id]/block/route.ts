@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { store, verifyAuthHeader } from '@/lib/server-store';
+import mongoose from 'mongoose';
+import { store, verifyAuthRequest, handleApiError } from '@/lib/server-store';
+import { isMongoConfigured, connectMongo, UserModel, mongoJson } from '@/lib/mongodb';
 
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const authHeader = req.headers.get('authorization');
-    const admin = verifyAuthHeader(authHeader);
+    const admin = await verifyAuthRequest(authHeader);
 
     if (admin.role !== 'admin') {
       return NextResponse.json({ success: false, message: 'Forbidden.' }, { status: 403 });
@@ -12,6 +14,24 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
 
     if (admin._id === params.id || admin.id === params.id) {
       return NextResponse.json({ success: false, message: 'Cannot block own account.' }, { status: 400 });
+    }
+
+    if (isMongoConfigured()) {
+      await connectMongo();
+      if (!mongoose.Types.ObjectId.isValid(params.id)) {
+        return mongoJson({ success: false, message: 'User not found.' }, 404);
+      }
+      const targetDoc = await UserModel.findById(params.id);
+      if (!targetDoc) {
+        return mongoJson({ success: false, message: 'User not found.' }, 404);
+      }
+      targetDoc.isBlocked = !targetDoc.isBlocked;
+      await targetDoc.save();
+      return mongoJson({
+        success: true,
+        message: `User ${targetDoc.name} is now ${targetDoc.isBlocked ? 'blocked' : 'unblocked'}.`,
+        isBlocked: targetDoc.isBlocked,
+      });
     }
 
     const targetUser = store.users.find((u) => u._id === params.id || u.id === params.id);
@@ -26,6 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       isBlocked: targetUser.isBlocked,
     });
   } catch (err: any) {
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    const { status, body } = handleApiError(err);
+    return NextResponse.json(body, { status });
   }
 }

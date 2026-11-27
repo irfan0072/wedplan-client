@@ -55,10 +55,11 @@ class ApiClient {
     }
 
     const method = (options.method || 'GET').toUpperCase();
-    const isBuiltInApi = baseUrl === '/api';
+    const isMongoActive = response.headers.get('x-wedplan-db') === 'mongodb';
+    const useLocalSync = baseUrl === '/api' && !isMongoActive;
 
     if (!response.ok) {
-      if (response.status === 404 && isBuiltInApi) {
+      if (response.status === 404 && useLocalSync) {
         const localFallback = fallbackSyncOnNotFound(method, endpoint, options.body);
         if (localFallback) return localFallback;
       }
@@ -66,7 +67,7 @@ class ApiClient {
       throw new Error(errorMessage);
     }
 
-    if (isBuiltInApi) {
+    if (useLocalSync) {
       recordSyncAfterResponse(method, endpoint, data);
       return mergeSyncOnResponse(method, endpoint, data);
     }

@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { store, verifyAuthHeader, generateToken, handleApiError } from '@/lib/server-store';
+import { store, verifyAuthRequest, generateToken, handleApiError } from '@/lib/server-store';
 import { getStripeClient } from '@/lib/stripe';
+import {
+  isMongoConfigured,
+  connectMongo,
+  UserModel,
+  TransactionModel,
+  serializeDoc,
+  mongoJson,
+} from '@/lib/mongodb';
 
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
-    const user = verifyAuthHeader(authHeader);
+    const user = await verifyAuthRequest(authHeader);
 
     const { sessionId } = await req.json();
     if (!sessionId) {
@@ -36,9 +44,48 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    user.subscriptionPlan = 'premium';
     const expiresAt = new Date();
     expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+    if (isMongoConfigured()) {
+      await connectMongo();
+      const updatedUser = await UserModel.findByIdAndUpdate(
+        user._id,
+        { subscriptionPlan: 'premium', subscriptionExpiresAt: expiresAt },
+        { new: true }
+      ).select('-password');
+
+      let tx = await TransactionModel.findOne({ stripeSessionId: session.id }).populate(
+        'vendorId',
+        'name email businessName image'
+      );
+
+      if (!tx) {
+        tx = await TransactionModel.create({
+          vendorId: user._id,
+          plan: 'premium',
+          amount: (session.amount_total || 4900) / 100,
+          currency: session.currency || 'usd',
+          stripeSessionId: session.id,
+          stripeSubscriptionId: (session.subscription as string) || '',
+          status: 'succeeded',
+        });
+        tx = await tx.populate('vendorId', 'name email businessName image');
+      }
+
+      const safeUser = serializeDoc(updatedUser);
+      const freshToken = generateToken(safeUser);
+
+      return mongoJson({
+        success: true,
+        message: 'Payment verified successfully! Welcome to WedPlan Premium!',
+        transaction: serializeDoc(tx),
+        user: safeUser,
+        token: freshToken,
+      });
+    }
+
+    user.subscriptionPlan = 'premium';
     user.subscriptionExpiresAt = expiresAt.toISOString();
 
     let tx = store.transactions.find((t) => t.stripeSessionId === session.id);

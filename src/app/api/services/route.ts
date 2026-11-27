@@ -1,24 +1,59 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { store, verifyAuthHeader } from '@/lib/server-store';
+import { store, verifyAuthRequest, handleApiError } from '@/lib/server-store';
+import { isMongoConfigured, connectMongo, ServiceModel, serializeDoc, mongoJson } from '@/lib/mongodb';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const search = searchParams.get('search')?.toLowerCase() || '';
+    const search = searchParams.get('search')?.trim() || '';
     const category = searchParams.get('category');
-    const location = searchParams.get('location')?.toLowerCase() || '';
+    const location = searchParams.get('location')?.trim() || '';
     const sort = searchParams.get('sort') || 'newest';
+
+    if (isMongoConfigured()) {
+      await connectMongo();
+      const query: any = { status: 'approved', isActive: true };
+      if (search) {
+        const rx = new RegExp(search, 'i');
+        query.$or = [{ serviceName: rx }, { description: rx }, { location: rx }];
+      }
+      if (category && category !== 'All') {
+        query.category = category;
+      }
+      if (location) {
+        query.location = new RegExp(location, 'i');
+      }
+
+      let sortObj: any = { createdAt: -1 };
+      if (sort === 'price_asc' || sort === 'price-asc') {
+        sortObj = { price: 1 };
+      } else if (sort === 'price_desc' || sort === 'price-desc') {
+        sortObj = { price: -1 };
+      }
+
+      const docs = await ServiceModel.find(query)
+        .populate('vendorId', 'name businessName image email phone subscriptionPlan')
+        .sort(sortObj);
+
+      const services = docs.map(serializeDoc);
+      return mongoJson({ success: true, services, total: services.length });
+    }
+
+    const searchLower = search.toLowerCase();
+    const locationLower = location.toLowerCase();
 
     let filtered = store.services.filter(
       (s) => s.status === 'approved' && s.isActive
     );
 
-    if (search) {
+    if (searchLower) {
       filtered = filtered.filter(
         (s) =>
-          s.serviceName.toLowerCase().includes(search) ||
-          s.description.toLowerCase().includes(search) ||
-          s.location.toLowerCase().includes(search)
+          s.serviceName.toLowerCase().includes(searchLower) ||
+          s.description.toLowerCase().includes(searchLower) ||
+          s.location.toLowerCase().includes(searchLower)
       );
     }
 
@@ -26,8 +61,8 @@ export async function GET(req: NextRequest) {
       filtered = filtered.filter((s) => s.category === category);
     }
 
-    if (location) {
-      filtered = filtered.filter((s) => s.location.toLowerCase().includes(location));
+    if (locationLower) {
+      filtered = filtered.filter((s) => s.location.toLowerCase().includes(locationLower));
     }
 
     if (sort === 'price_asc' || sort === 'price-asc') {
@@ -54,7 +89,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
-    const user = verifyAuthHeader(authHeader);
+    const user = await verifyAuthRequest(authHeader);
 
     if (user.role !== 'vendor') {
       return NextResponse.json(
@@ -72,6 +107,58 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const defaultImgs =
+      Array.isArray(images) && images.length > 0
+        ? images
+        : ['https://images.unsplash.com/photo-1519741497674-611481863552?w=800&auto=format&fit=crop&q=80'];
+
+    if (isMongoConfigured()) {
+      await connectMongo();
+      if (user.subscriptionPlan !== 'premium') {
+        const activeCount = await ServiceModel.countDocuments({
+          vendorId: user._id,
+          isActive: true,
+        });
+        if (activeCount >= 3) {
+          return mongoJson(
+            {
+              success: false,
+              message:
+                'Free tier limit reached: Free vendors can publish a maximum of 3 active services. Please upgrade to Premium for unlimited services!',
+              limitReached: true,
+            },
+            403
+          );
+        }
+      }
+
+      const created = await ServiceModel.create({
+        vendorId: user._id,
+        serviceName,
+        category,
+        description,
+        price: Number(price),
+        location,
+        images: defaultImgs,
+        status: 'pending',
+        isActive: true,
+      });
+
+      const populated = await created.populate(
+        'vendorId',
+        'name businessName image email phone subscriptionPlan'
+      );
+
+      return mongoJson(
+        {
+          success: true,
+          message: 'Service submitted successfully! It is pending admin approval.',
+          service: serializeDoc(populated),
+        },
+        201
+      );
+    }
+
     // Free plan limitation: maximum 3 active services
     if (user.subscriptionPlan !== 'premium') {
       const activeCount = store.services.filter(
@@ -82,7 +169,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            message: 'Free tier limit reached: Free vendors can publish a maximum of 3 active services. Please upgrade to Premium for unlimited services!',
+            message:
+              'Free tier limit reached: Free vendors can publish a maximum of 3 active services. Please upgrade to Premium for unlimited services!',
             limitReached: true,
           },
           { status: 403 }
@@ -99,10 +187,8 @@ export async function POST(req: NextRequest) {
       description,
       price: Number(price),
       location,
-      images: Array.isArray(images) && images.length > 0 ? images : [
-        'https://images.unsplash.com/photo-1519741497674-611481863552?w=800&auto=format&fit=crop&q=80'
-      ],
-      status: 'pending', // Default status: Pending (until approved by admin)
+      images: defaultImgs,
+      status: 'pending',
       isActive: true,
       createdAt: new Date().toISOString(),
     };
@@ -118,9 +204,7 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err: any) {
-    return NextResponse.json(
-      { success: false, message: err.message || 'Error creating service.' },
-      { status: 500 }
-    );
+    const { status, body } = handleApiError(err);
+    return NextResponse.json(body, { status });
   }
 }

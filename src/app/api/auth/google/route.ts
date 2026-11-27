@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { store, generateToken } from '@/lib/server-store';
+import { isMongoConfigured, connectMongo, UserModel, serializeDoc, mongoJson } from '@/lib/mongodb';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, name, image, role = 'customer', accessToken, idToken, googleId } = body;
+    const { email, name, image, role = 'customer', accessToken } = body;
 
     let verifiedEmail = email;
     let verifiedName = name;
     let verifiedImage = image;
 
-    // If an accessToken is provided from Google Identity Services, verify it against Google OAuth2 userinfo API
     if (accessToken) {
       try {
         const googleRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -36,6 +36,45 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (isMongoConfigured()) {
+      await connectMongo();
+      let userDoc = await UserModel.findOne({ email: verifiedEmail.toLowerCase() });
+
+      if (!userDoc) {
+        const assignedRole = role === 'vendor' ? 'vendor' : 'customer';
+        userDoc = await UserModel.create({
+          name: verifiedName || verifiedEmail.split('@')[0],
+          email: verifiedEmail.toLowerCase(),
+          image: verifiedImage || '',
+          role: assignedRole,
+          businessName: assignedRole === 'vendor' ? `${verifiedName || 'Vendor'}'s Wedding Studio` : '',
+          subscriptionPlan: 'free',
+          isBlocked: false,
+        });
+      } else {
+        if (verifiedImage && !userDoc.image) {
+          userDoc.image = verifiedImage;
+          await userDoc.save();
+        }
+      }
+
+      if (userDoc.isBlocked) {
+        return mongoJson(
+          { success: false, message: 'Your account has been suspended by an administrator.' },
+          403
+        );
+      }
+
+      const safeUser = serializeDoc(userDoc);
+      const token = generateToken(safeUser);
+      return mongoJson({
+        success: true,
+        message: 'Google login successful!',
+        token,
+        user: safeUser,
+      });
+    }
+
     let user = store.users.find((u) => u.email.toLowerCase() === verifiedEmail.toLowerCase());
 
     if (!user) {
@@ -54,7 +93,6 @@ export async function POST(req: NextRequest) {
       };
       store.users.unshift(user);
     } else {
-      // Update image or name if missing
       if (verifiedImage && !user.image) user.image = verifiedImage;
       if (verifiedName && !user.name) user.name = verifiedName;
     }

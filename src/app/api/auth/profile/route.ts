@@ -1,12 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { store, verifyAuthHeader } from '@/lib/server-store';
+import { verifyAuthRequest, handleApiError } from '@/lib/server-store';
+import { isMongoConfigured, connectMongo, UserModel, serializeDoc, mongoJson } from '@/lib/mongodb';
 
 export async function PUT(req: NextRequest) {
   try {
     const authHeader = req.headers.get('authorization');
-    const user = verifyAuthHeader(authHeader);
-
+    const user = await verifyAuthRequest(authHeader);
     const { name, image, phone, bio, businessName } = await req.json();
+
+    if (isMongoConfigured()) {
+      await connectMongo();
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (image !== undefined) updates.image = image;
+      if (phone !== undefined) updates.phone = phone;
+      if (bio !== undefined) updates.bio = bio;
+      if (businessName !== undefined && user.role === 'vendor') updates.businessName = businessName;
+
+      const updated = await UserModel.findByIdAndUpdate(user._id, updates, { new: true }).select('-password');
+      return mongoJson({
+        success: true,
+        message: 'Profile updated successfully!',
+        user: serializeDoc(updated),
+      });
+    }
 
     if (name !== undefined) user.name = name;
     if (image !== undefined) user.image = image;
@@ -22,9 +39,7 @@ export async function PUT(req: NextRequest) {
       user: safeUser,
     });
   } catch (err: any) {
-    return NextResponse.json(
-      { success: false, message: err.message || 'Profile update error.' },
-      { status: 400 }
-    );
+    const { status, body } = handleApiError(err);
+    return NextResponse.json(body, { status });
   }
 }
