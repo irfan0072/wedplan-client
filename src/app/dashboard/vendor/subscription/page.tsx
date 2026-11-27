@@ -17,10 +17,31 @@ import {
 import { toast } from 'sonner';
 
 export default function VendorSubscriptionPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const [loadingCheckout, setLoadingCheckout] = useState(false);
+  const [downgrading, setDowngrading] = useState(false);
 
   const isPremium = user?.subscriptionPlan === 'premium';
+
+  const handleDowngradeToFree = async () => {
+    try {
+      setDowngrading(true);
+      const res = await api.post('/payment/downgrade');
+      if (res.success) {
+        if (res.token) {
+          localStorage.setItem('wedplan_token', res.token);
+        }
+        await refreshUser();
+        toast.success('Switched back to Free Plan.');
+      } else {
+        toast.error(res.message || 'Failed to switch plan.');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Error switching subscription plan.');
+    } finally {
+      setDowngrading(false);
+    }
+  };
 
   const handleUpgradeToPremium = async () => {
     try {
@@ -82,7 +103,7 @@ export default function VendorSubscriptionPage() {
           </div>
         </div>
 
-        {!isPremium && (
+        {!isPremium ? (
           <button
             onClick={handleUpgradeToPremium}
             disabled={loadingCheckout}
@@ -94,6 +115,15 @@ export default function VendorSubscriptionPage() {
               <Sparkles className="w-4 h-4" />
             )}
             <span>Upgrade to Premium ($49/yr)</span>
+          </button>
+        ) : (
+          <button
+            onClick={handleDowngradeToFree}
+            disabled={downgrading}
+            className="px-5 py-2.5 rounded-2xl text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors flex items-center justify-center space-x-2 disabled:opacity-50"
+          >
+            {downgrading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+            <span>Switch to Free Plan</span>
           </button>
         )}
       </div>
