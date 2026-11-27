@@ -35,10 +35,18 @@ class ApiClient {
       headers,
     });
 
-    const data = await response.json().catch(() => ({
-      success: false,
-      message: 'Failed to parse server response.',
-    }));
+    const rawText = await response.text();
+    let data: any = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : {};
+    } catch {
+      data = {
+        success: false,
+        message: response.status === 413
+          ? 'File is too large for server upload (max 4MB).'
+          : `Server returned non-JSON response (${response.status}): ${rawText.slice(0, 100) || 'Empty response'}`,
+      };
+    }
 
     if (!response.ok) {
       const errorMessage = data?.message || `Request failed with status ${response.status}`;

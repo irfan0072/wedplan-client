@@ -16,7 +16,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
   value,
   onChange,
   label = 'Upload Image',
-  helperText = 'PNG, JPG, or WEBP up to 10MB (Hosted via ImgBB)',
+  helperText = 'PNG, JPG, or WEBP up to 4MB (Hosted via ImgBB)',
 }) => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -25,8 +25,8 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size exceeds 10MB limit.');
+    if (file.size > 4 * 1024 * 1024) {
+      toast.error('File size exceeds 4MB serverless upload limit.');
       return;
     }
 
