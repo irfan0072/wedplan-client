@@ -28,6 +28,9 @@ function PaymentSuccessContent() {
       try {
         const res = await api.post('/payment/verify-session', { sessionId });
         if (res.success) {
+          if (res.token) {
+            localStorage.setItem('wedplan_token', res.token);
+          }
           setSuccess(true);
           setMessage('Your payment has been verified! Your account has been upgraded to Premium.');
           toast.success('Welcome to WedPlan Premium!');

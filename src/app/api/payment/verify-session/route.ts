@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { store, verifyAuthHeader } from '@/lib/server-store';
+import { store, verifyAuthHeader, generateToken, handleApiError } from '@/lib/server-store';
+import { getStripeClient } from '@/lib/stripe';
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,7 +9,31 @@ export async function POST(req: NextRequest) {
 
     const { sessionId } = await req.json();
     if (!sessionId) {
-      return NextResponse.json({ success: false, message: 'Session ID required.' }, { status: 400 });
+      return NextResponse.json({ success: false, message: 'Stripe Session ID is required.' }, { status: 400 });
+    }
+
+    const stripe = getStripeClient();
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    if (session.payment_status !== 'paid') {
+      return NextResponse.json(
+        { success: false, message: 'Payment has not been completed or verified by Stripe.' },
+        { status: 400 }
+      );
+    }
+
+    const sessionVendorId = session.metadata?.vendorId || session.client_reference_id;
+    const sessionEmail = session.metadata?.vendorEmail || session.customer_email;
+    const currentUserId = (user._id || user.id).toString();
+
+    if (
+      sessionVendorId !== currentUserId &&
+      sessionEmail?.toLowerCase() !== user.email?.toLowerCase()
+    ) {
+      return NextResponse.json(
+        { success: false, message: 'Checkout session does not belong to the authenticated vendor.' },
+        { status: 403 }
+      );
     }
 
     user.subscriptionPlan = 'premium';
@@ -16,20 +41,24 @@ export async function POST(req: NextRequest) {
     expiresAt.setFullYear(expiresAt.getFullYear() + 1);
     user.subscriptionExpiresAt = expiresAt.toISOString();
 
-    const tx = {
-      _id: `tx_${Date.now()}`,
-      id: `tx_${Date.now()}`,
-      vendorId: user,
-      plan: 'premium',
-      amount: 49.0,
-      currency: 'usd',
-      stripeSessionId: sessionId,
-      status: 'succeeded',
-      createdAt: new Date().toISOString(),
-    };
+    let tx = store.transactions.find((t) => t.stripeSessionId === session.id);
+    if (!tx) {
+      tx = {
+        _id: `tx_${Date.now()}`,
+        id: `tx_${Date.now()}`,
+        vendorId: user,
+        plan: 'premium',
+        amount: (session.amount_total || 4900) / 100,
+        currency: session.currency || 'usd',
+        stripeSessionId: session.id,
+        stripeSubscriptionId: (session.subscription as string) || '',
+        status: 'succeeded',
+        createdAt: new Date().toISOString(),
+      };
+      store.transactions.unshift(tx);
+    }
 
-    store.transactions.unshift(tx);
-
+    const freshToken = generateToken(user);
     const { password: _, ...safeUser } = user;
 
     return NextResponse.json({
@@ -37,8 +66,10 @@ export async function POST(req: NextRequest) {
       message: 'Payment verified successfully! Welcome to WedPlan Premium!',
       transaction: tx,
       user: safeUser,
+      token: freshToken,
     });
   } catch (err: any) {
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    const { status, body } = handleApiError(err);
+    return NextResponse.json(body, { status });
   }
 }

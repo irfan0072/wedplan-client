@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { store, verifyAuthHeader } from '@/lib/server-store';
+import { verifyAuthHeader, handleApiError } from '@/lib/server-store';
+import { getStripeClient } from '@/lib/stripe';
 
 export async function POST(req: NextRequest) {
   try {
@@ -7,20 +8,55 @@ export async function POST(req: NextRequest) {
     const user = verifyAuthHeader(authHeader);
 
     if (user.role !== 'vendor') {
-      return NextResponse.json({ success: false, message: 'Forbidden: Vendors only.' }, { status: 403 });
+      return NextResponse.json(
+        { success: false, message: 'Forbidden: Only vendors can upgrade to Premium.' },
+        { status: 403 }
+      );
     }
 
-    const host = req.headers.get('host') || 'localhost:3000';
-    const proto = host.includes('localhost') ? 'http' : 'https';
-    const mockSessionId = `cs_test_${Date.now()}`;
-    const redirectUrl = `${proto}://${host}/payment/success?session_id=${mockSessionId}`;
+    const stripe = getStripeClient();
+
+    const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || 'localhost:3000';
+    const proto = req.headers.get('x-forwarded-proto') || (host.includes('localhost') ? 'http' : 'https');
+    const origin = process.env.NEXT_PUBLIC_APP_URL || `${proto}://${host}`;
+
+    const session = await stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: 'WedPlan Premium Vendor Subscription',
+              description:
+                'Publish unlimited active wedding services, verified premium badge, and priority placement.',
+              images: [
+                'https://images.unsplash.com/photo-1519741497674-611481863552?w=500&auto=format&fit=crop&q=80',
+              ],
+            },
+            unit_amount: 4900, // $49.00 USD
+          },
+          quantity: 1,
+        },
+      ],
+      client_reference_id: (user._id || user.id).toString(),
+      customer_email: user.email,
+      metadata: {
+        vendorId: (user._id || user.id).toString(),
+        vendorEmail: user.email,
+        plan: 'premium',
+      },
+      success_url: `${origin}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/payment/cancel`,
+    });
 
     return NextResponse.json({
       success: true,
-      url: redirectUrl,
-      sessionId: mockSessionId,
+      url: session.url,
+      sessionId: session.id,
     });
   } catch (err: any) {
-    return NextResponse.json({ success: false, message: err.message }, { status: 500 });
+    const { status, body } = handleApiError(err);
+    return NextResponse.json(body, { status });
   }
 }
